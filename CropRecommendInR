@@ -1,0 +1,56 @@
+  crsystem <- function(soilx,longx,latx,monthx) {
+  library(sqldf)
+  
+  #weatherdata<-read.csv("C:\\Users\\ishita\\Documents\\4091_2019-03-31-14-05-15\\4091_2019-03-31-14-05-15\\nfmodifed.csv")
+  
+  cropdata<-read.csv("C:\\Users\\ishit\\Documents\\capstonecrop.csv")
+  
+  #monthlywd = sqldf("SELECT CAST(strftime('%Y',Date) AS INT) as Year, CAST(strftime('%m',Date) AS INT) 
+  #                as Month,Longitude,Latitude,Elevation,AVG(MaxTemperature) as MaxTemp,AVG(MinTemperature) 
+   #               as MinTemp,SUM(Precipitation) as Rainfall FROM weatherdata GROUP BY Longitude, Latitude,
+    #              strftime('%Y',Date),strftime('%m',Date)")
+  #write.csv(monthlywd,file = "C:\\Users\\hostarian\\Documents\\capstoneUI\\Capstone\\monthlydata.csv")
+  
+  #src(weatherdata)
+  
+  monthlywd<-read.csv("C:\\Users\\ishit\\Documents\\monthlydata.csv")
+  n<-dim(monthlywd)[1]
+  n
+  monthlywd<-monthlywd[1:(n-1),]
+  monthlywd
+  userinput<-c("soil"=soilx,"long"=longx,"lat"=latx,"month"=monthx)
+  #calculate the nearest station and get the location
+  
+  loc<-sqldf("SELECT DISTINCT Longitude, Latitude FROM monthlywd")
+  minlocstation<-sqldf(sprintf("SELECT Longitude,Latitude, 
+                               SQRT(SQUARE(Longitude-%s)+SQUARE(Latitude-%s)) 
+                               AS Distance FROM loc ORDER BY Distance LIMIT 1",
+                               userinput["long"],userinput["lat"]))
+  filteroncropdatasoil<-sqldf(sprintf("SELECT *,(grow2/30) 
+                                      as growmon from cropdata where 
+                                      Soil='%s'",userinput["soil"]))
+  
+  z<-dim(filteroncropdatasoil)[1]
+  i<-1
+  
+  while(i<=z){
+    
+    filteredrainfalldata<-sqldf(sprintf("SELECT Year,Longitude, Latitude,MIN(MinTemp) as MinTemp, MAX(MaxTemp) as MaxTemp,SUM(Rainfall) AS Rainfall FROM monthlywd 
+                                        WHERE Longitude=%s AND Latitude=%s AND Month>=%s AND Month<=(%s+%s) GROUP BY Year",minlocstation$Longitude,
+                                        minlocstation$Latitude,userinput["month"],filteroncropdatasoil$growmon[i], userinput["month"]))
+    filteredavgrainfall<-sqldf("SELECT AVG(MinTemp) as MinTemp,AVG(MaxTemp) as MaxTemp,AVG(Rainfall) AS Rainfall FROM filteredrainfalldata")
+    if(filteredavgrainfall$MinTemp>filteroncropdatasoil$mintemp[i] && filteredavgrainfall$MaxTemp<filteroncropdatasoil$maxtemp[i] && filteredavgrainfall$Rainfall<filteroncropdatasoil$minrainfall[i])
+    {
+      filteroncropdatasoil<-filteroncropdatasoil[-c(i),]
+      z<-z-1
+    }
+    else
+    {
+      i<-i+1
+    }
+  }
+  
+  res<-sqldf("SELECT Soil, Type as Crop, (mintemp+maxtemp/2) as 'AvgTemp(C)', (minrainfall+maxrainfall/2) as 'AvgRain(mm)' FROM filteroncropdatasoil")
+  return(res)
+  
+}
